@@ -15,4 +15,3 @@ This script relies on an undocumented X endpoint. It may stop working when X cha
 ## License
 
 MIT
-
