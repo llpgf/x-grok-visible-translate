@@ -1,8 +1,16 @@
 // ==UserScript==
-// @name         X Grok 自動繁中翻譯（原生優先）
+// @name         X Grok Visible Translator (Native First)
+// @name:zh-TW   X Grok 自動繁中翻譯（原生優先）
+// @name:zh-CN   X Grok 自动中文翻译（原生优先）
+// @name:ja      X Grok 自動翻訳（ネイティブ優先）
+// @name:ko      X Grok 자동 번역 (기본 번역 우선)
 // @namespace    ben/x-grok-visible-translator
-// @version      1.0.2
-// @description  僅翻譯可視貼文；目標語言跟隨 X 介面語言，優先使用 X 原生翻譯。
+// @version      1.0.4
+// @description  Translates visible posts into X's interface language, preferring X's native control.
+// @description:zh-TW 僅翻譯可視貼文；目標語言跟隨 X 介面語言，優先使用 X 原生翻譯。
+// @description:zh-CN 仅翻译可见帖子；目标语言跟随 X 界面语言，优先使用 X 原生翻译。
+// @description:ja 可視ポストのみを X の表示言語へ翻訳し、X の標準翻訳を優先します。
+// @description:ko 보이는 게시물만 X 표시 언어로 번역하며, X 기본 번역을 우선 사용합니다.
 // @match        https://x.com/*
 // @match        https://twitter.com/*
 // @grant        none
@@ -21,7 +29,13 @@
   const API_URL = 'https://api.x.com/2/grok/translation.json';
   const FALLBACK_BEARER = 'AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA';
   const CACHE_KEY = 'x-grok-visible-translate-cache-v1';
-  const nativeTranslation = /(?:show original|顯示原文|显示原文|translated by|已翻譯|已翻译)/i;
+  const UI_LABELS = {
+    en: { original: 'Show original', translate: 'Show translation', loading: 'Translating…' },
+    'zh-tw': { original: '顯示原文', translate: '顯示翻譯', loading: '翻譯中…' },
+    'zh-cn': { original: '显示原文', translate: '显示翻译', loading: '翻译中…' },
+    ja: { original: '原文を表示', translate: '翻訳を表示', loading: '翻訳中…' },
+    ko: { original: '원문 보기', translate: '번역 보기', loading: '번역 중…' },
+  };
   const state = {
     headers: {}, queue: [], active: new Map(), jobs: new Map(), cache: new Map(), observed: new WeakSet(),
     versions: new WeakMap(), scanQueued: false, scanRoots: new Set(), cooldownUntil: 0,
@@ -35,6 +49,13 @@
     if (locale === 'zh-hant' || locale.startsWith('zh-hant-')) return 'zh-TW';
     if (locale === 'zh-hans' || locale.startsWith('zh-hans-')) return 'zh-CN';
     return locale;
+  }
+
+  function uiLabels() {
+    const locale = document.documentElement.lang.toLowerCase();
+    if (locale === 'zh-hant' || locale.startsWith('zh-hant-')) return UI_LABELS['zh-tw'];
+    if (locale === 'zh-hans' || locale.startsWith('zh-hans-')) return UI_LABELS['zh-cn'];
+    return UI_LABELS[locale] || UI_LABELS[locale.split('-')[0]] || UI_LABELS.en;
   }
 
   function loadCache() {
@@ -112,7 +133,8 @@
   }
 
   function hasNativeTranslation(article) {
-    return [...(article?.querySelectorAll('button, [role="button"], span') || [])].some((node) => nativeTranslation.test(node.textContent || ''));
+    const originals = new Set(Object.values(UI_LABELS).map((labels) => labels.original));
+    return [...(article?.querySelectorAll('button, [role="button"], span') || [])].some((node) => originals.has((node.getAttribute('aria-label') || node.textContent || '').trim()));
   }
 
   function shouldTranslate(node) {
@@ -172,7 +194,7 @@
     let box;
     const timer = setTimeout(() => {
       if (node.dataset.xGrokState !== 'pending') return;
-      box = document.createElement('small'); box.className = 'x-grok-translation'; box.textContent = '翻譯中…';
+      box = document.createElement('small'); box.className = 'x-grok-translation'; box.textContent = uiLabels().loading;
       node.insertAdjacentElement('afterend', box);
     }, 150);
     return () => { clearTimeout(timer); box?.remove(); };
@@ -218,8 +240,15 @@
   }
 
   function nativeTranslateButton(article) {
-    return [...article.querySelectorAll('button[aria-label], [role="button"][aria-label]')].find((button) =>
-      /^(?:顯示翻譯|显示翻译|Show translation|Translate post)$/i.test(button.getAttribute('aria-label') || ''));
+    const translations = new Set([...Object.values(UI_LABELS).map((labels) => labels.translate), 'Translate post']);
+    const buttons = [...article.querySelectorAll('button[aria-label], [role="button"][aria-label]')];
+    const known = buttons.find((button) => translations.has((button.getAttribute('aria-label') || '').trim()));
+    if (known) return known;
+    const text = article.querySelector('[data-testid="tweetText"]');
+    return buttons.find((button) => {
+      const control = button.parentElement;
+      return control?.querySelector('svg') && control.parentElement === text?.parentElement;
+    });
   }
 
   function addPostToggle(node) {
@@ -227,7 +256,7 @@
     const slot = document.createElement('div');
     slot.dataset.xGrokToggle = '';
     const button = document.createElement('button');
-    button.type = 'button'; button.setAttribute('aria-label', '顯示原文'); button.textContent = '顯示原文';
+    button.type = 'button'; button.setAttribute('aria-label', uiLabels().original); button.textContent = uiLabels().original;
     Object.assign(button.style, { border: '0', padding: '0', background: 'transparent', color: 'rgb(29, 155, 240)', cursor: 'pointer', font: 'inherit' });
     button.onclick = () => {
       const version = state.versions.get(node);
@@ -235,7 +264,7 @@
       version.showingOriginal = !version.showingOriginal;
       node.replaceChildren(document.createTextNode(version.showingOriginal ? version.original : version.translated));
       node.lang = version.showingOriginal ? version.originalLang : targetLang();
-      const label = version.showingOriginal ? '顯示翻譯' : '顯示原文';
+      const label = version.showingOriginal ? uiLabels().translate : uiLabels().original;
       button.textContent = label; button.setAttribute('aria-label', label);
     };
     slot.append(button); node.parentElement?.insertBefore(slot, node);
