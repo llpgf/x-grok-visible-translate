@@ -7,6 +7,7 @@
 // @match        https://twitter.com/*
 // @grant        none
 // @run-at       document-start
+// @license      MIT
 // @homepageURL  https://github.com/llpgf/x-grok-visible-translate
 // @downloadURL  https://raw.githubusercontent.com/llpgf/x-grok-visible-translate/main/x-grok-visible-translate.user.js
 // @updateURL    https://raw.githubusercontent.com/llpgf/x-grok-visible-translate/main/x-grok-visible-translate.user.js
