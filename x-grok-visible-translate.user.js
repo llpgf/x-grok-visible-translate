@@ -5,7 +5,7 @@
 // @name:ja      X Grok 自動翻訳（ネイティブ優先）
 // @name:ko      X Grok 자동 번역 (기본 번역 우선)
 // @namespace    ben/x-grok-visible-translator
-// @version      1.0.4
+// @version      1.0.5
 // @description  Translates visible posts into X's interface language, preferring X's native control.
 // @description:zh-TW 僅翻譯可視貼文；目標語言跟隨 X 介面語言，優先使用 X 原生翻譯。
 // @description:zh-CN 仅翻译可见帖子；目标语言跟随 X 界面语言，优先使用 X 原生翻译。
@@ -322,8 +322,18 @@
     new MutationObserver((mutations) => mutations.forEach((mutation) => mutation.addedNodes.forEach((node) => {
       if (node.nodeType === Node.ELEMENT_NODE) queueScan(node);
     }))).observe(main, { childList: true, subtree: true });
+  document.addEventListener('click', (event) => {
+    const more = event.target instanceof Element && event.target.closest('[data-testid="tweet-text-show-more-link"]');
+      const article = more?.closest('article');
+      if (!article) return;
+      setTimeout(() => article.querySelectorAll('[data-testid="tweetText"]').forEach((node) => {
+        state.versions.delete(node);
+        node.parentElement?.querySelector(':scope > [data-x-grok-toggle]')?.remove();
+        delete node.dataset.xGrokState;
+        forceNativeThenFallback(node);
+      }), 300);
+    });
   }
 
   document.readyState === 'loading' ? document.addEventListener('DOMContentLoaded', start, { once: true }) : start();
 })();
-
